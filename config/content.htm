@@ -401,6 +401,185 @@ def game_loop():
     update_score()
 
 timer_ref = timer.set_interval(game_loop, 100)
+</script><h1>⛧</h1>
+<p><strong>按按鈕 可以改變小白點位置</strong></p>
+<!-- 導入 Brython -->
+<script src="/static/brython.js"></script>
+<script src="/static/brython_stdlib.js"></script>
+<script>
+window.onload = function() {
+    console.log("啟動 Brython...");
+    brython({debug:1, pythonpath:['/static/', './../downloads/py/']});
+}
+</script>
+<!-- 遊戲顯示區 -->
+<div id="brython_div1" style="width: 800px; height: 800px; border: 2px solid black; position: relative; margin: 10px; overflow: hidden;"></div>
+<!-- 按鈕 -->
+<p style="text-align: center; margin-top: 10px;"><button id="moveButton">⛧</button></p>
+<script type="text/python3">
+from browser import document, html, timer
+import random, math
+
+CELL_SIZE = 60
+IMG_PATH = "https://mde.tw/cp2025/reeborg/src/images/"
+
+div = document['brython_div1']
+div.style.backgroundColor = "midnightblue"
+
+# === 閃爍星星 ===
+letters = []
+def create_h_line(count):
+    container = html.DIV()
+    container.style.display = "flex"
+    container.style.justifyContent = "space-between"
+    container.style.position = "absolute"
+    container.style.bottom = "10px"
+    container.style.left = "10px"
+    for _ in range(count):
+        span = html.SPAN("星星")
+        span.style.fontWeight = "bold"
+        span.style.color = random.choice(["red","green","blue","orange","purple"])
+        span.style.fontSize = f"{random.randint(28,50)}px"
+        container <= span
+        letters.append(span)
+    div <= container
+
+create_h_line(40)
+
+def flicker():
+    for span in letters:
+        span.style.color = random.choice(["yellow","white","lightblue","lightyellow"])
+        span.style.fontSize = f"{random.randint(28,50)}px"
+    timer.set_timeout(flicker, 300)
+
+flicker()
+
+# === 閃爍小圓點 ===
+dots = []
+
+def create_flickering_dots(count):
+    for _ in range(count):
+        dot = html.DIV()
+        dot.style.width = f"{random.randint(3,8)}px"
+        dot.style.height = dot.style.width
+        dot.style.borderRadius = "50%"
+        dot.style.backgroundColor = "white"
+        dot.style.position = "absolute"
+        dot.style.left = f"{random.randint(0, 700)}px"
+        dot.style.top = f"{random.randint(0, 600)}px"
+        div <= dot
+        dots.append(dot)
+
+create_flickering_dots(30)
+
+def update_dots():
+    for dot in dots:
+        dot.style.left = f"{random.randint(0,700)}px"
+        dot.style.top = f"{random.randint(0,600)}px"
+
+# === 世界與機器人 ===
+class World:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.layers = {
+            "objects": html.CANVAS(width=width*CELL_SIZE, height=height*CELL_SIZE),
+            "robots": html.CANVAS(width=width*CELL_SIZE, height=height*CELL_SIZE)
+        }
+        container = html.DIV(style={"position":"relative","width":f"{width*CELL_SIZE}px","height":f"{height*CELL_SIZE}px"})
+        for canvas in self.layers.values():
+            canvas.style = {"position":"absolute","top":"0px","left":"0px"}
+            container <= canvas
+        div <= container
+
+    def _draw_image(self, ctx, src, x, y):
+        img = html.IMG()
+        img.src = src
+        def onload(evt):
+            px = x*CELL_SIZE
+            py = (self.height-1-y)*CELL_SIZE
+            ctx.drawImage(img, px, py, CELL_SIZE, CELL_SIZE)
+        img.bind("load", onload)
+
+class AnimatedRobot:
+    def __init__(self, world, x, y):
+        self.world = world
+        self.x = x-1
+        self.y = y-1
+        self.robot_ctx = world.layers["robots"].getContext("2d")
+        self.trace_ctx = world.layers["objects"].getContext("2d")
+        self.queue = []
+        self.running = False
+        self._draw_robot()
+
+    def _draw_robot(self):
+        self.robot_ctx.clearRect(0,0,self.world.width*CELL_SIZE,self.world.height*CELL_SIZE)
+        self.world._draw_image(self.robot_ctx, IMG_PATH + "blue_robot_e.png", self.x, self.y)
+
+    def mark(self, x, y):
+        ctx = self.trace_ctx
+        ctx.fillStyle = "yellow"
+        px = x * CELL_SIZE
+        py = (self.world.height-1-y) * CELL_SIZE
+        ctx.fillRect(px+CELL_SIZE*0.2, py+CELL_SIZE*0.2, CELL_SIZE*0.6, CELL_SIZE*0.6)
+
+    def move_to(self, x, y, mark=False):
+        def action(done):
+            self.x, self.y = x, y
+            if mark:
+                self.mark(x, y)
+            self._draw_robot()
+            timer.set_timeout(done, 300)
+        self.queue.append(action)
+        self._run_queue()
+
+    def _run_queue(self):
+        if self.running or not self.queue: return
+        self.running = True
+        action = self.queue.pop(0)
+        action(lambda: self._done())
+
+    def _done(self):
+        self.running = False
+        self._run_queue()
+
+# 初始化世界
+world = World(12,12)
+robot = AnimatedRobot(world,6,6)
+
+# 五角星座標
+def calculate_star_points(center_x, center_y, outer_radius, inner_radius):
+    points = []
+    for i in range(5):
+        angle = math.radians(i*72)
+        outer_x = center_x + outer_radius*math.cos(angle)
+        outer_y = center_y + outer_radius*math.sin(angle)
+        points.append((outer_x, outer_y))
+        inner_angle = math.radians(i*72+36)
+        inner_x = center_x + inner_radius*math.cos(inner_angle)
+        inner_y = center_y + inner_radius*math.sin(inner_angle)
+        points.append((inner_x, inner_y))
+    return points
+
+star_points = calculate_star_points(6,6,4,2)
+
+def draw_star_path():
+    for i in range(5):
+        x1,y1 = star_points[i*2]
+        x2,y2 = star_points[i*2+1]
+        robot.move_to(x1,y1,mark=True)
+        robot.move_to(x2,y2,mark=True)
+    robot.move_to(star_points[0][0], star_points[0][1], mark=True)
+
+draw_star_path()
+
+# 按鈕事件，增加 debug log
+def on_button_click(ev):
+    print("⛧ 按鈕被點擊")
+    update_dots()
+    draw_star_path()
+
+document["moveButton"].bind("click", on_button_click)
 </script><h1>Brython</h1>
 <p><a href="https://brython.info/">Brython</a> 是一個將 <a href="https://en.wikipedia.org/wiki/Python_(programming_language)">Python</a> 語法編譯為 <a href="https://developer.mozilla.org/zh-TW/docs/Web/JavaScript">JavaScript</a> 的工具，能直接在瀏覽器中以 <a href="https://en.wikipedia.org/wiki/Python_(programming_language)">Python</a> 撰寫前端網頁程式。</p>
 <p><button id="add1to100">1 add to 100</button><button id="robot1">機器人巡邏</button><button id="free_walk">自由行</button></p>
